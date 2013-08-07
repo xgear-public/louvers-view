@@ -1,0 +1,6 @@
+<resources>
+    <declare-styleable name="LouversView">
+        <attr name="lamellaCount" format="integer" />
+        <attr name="angle" format="integer" />
+    </declare-styleable>
+</resources>
