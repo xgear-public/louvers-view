@@ -1,6 +1,9 @@
 <resources>
     <declare-styleable name="LouversView">
-        <attr name="lamellaCount" format="integer" />
-        <attr name="angle" format="integer" />
+        <attr name="panelCount" format="integer" />
+        <attr name="maxAngle" format="integer" />
+
+        <attr name="horizontal" format="boolean" />
+        <attr name="vertical" format="boolean" />
     </declare-styleable>
 </resources>
