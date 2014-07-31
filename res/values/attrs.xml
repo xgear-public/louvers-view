@@ -1,9 +1,13 @@
 <resources>
     <declare-styleable name="LouversView">
-        <attr name="panelCount" format="integer" />
-        <attr name="maxAngle" format="integer" />
+        <attr name="panel_count_vertical" format="integer" />
+        <attr name="panel_count_horizontal" format="integer" />
+
+        <attr name="max_angle" format="integer" />
 
         <attr name="horizontal" format="boolean" />
         <attr name="vertical" format="boolean" />
+
+        <attr name="edge_lock" format="boolean" />
     </declare-styleable>
 </resources>

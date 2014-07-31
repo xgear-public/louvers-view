@@ -5,7 +5,9 @@ import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Camera;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.support.v4.view.GestureDetectorCompat;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -20,7 +22,8 @@ public class LouversView extends FrameLayout {
 
     private GestureDetectorCompat mGestureDetector;
 
-    private Bitmap[] bArr;
+    private Bitmap[] bArrV;
+    private Bitmap[] bArrH;
 
     private Matrix skew;
     private Camera mCamera;
@@ -28,20 +31,18 @@ public class LouversView extends FrameLayout {
     private View mBackView;
     private View mFrontView;
 
-
+    private Rect mHitRectStartV, mHitRectStartH, mHitRectEndV, mHitRectEndH;
 
     //Constants
     private float MAX_ANGLE = 40;
     private static final int DEF_PANEL_COUNT = -1;
     private static final int DEF_ANGLE = 0;
 
-
+    private static final int AXIS_X = 1;
+    private static final int AXIS_Y = 2;
+    private static final int AXIS_BOTH = 3;
 
     //State related fields
-    public enum Direction{
-        AXIS_X,
-        AXIS_Y;
-    }
 
     public enum MovementDirection{
         LEFT,
@@ -50,20 +51,26 @@ public class LouversView extends FrameLayout {
         DOWN;
     }
 
+    private boolean edgeLock;
     private boolean isLocked;
-    private Direction mCurrentDirection = Direction.AXIS_Y;
-    private MovementDirection mCurrentMovementDirection = MovementDirection.DOWN;
+    private int mAccessibleDirections = 0;
+    private int mCurrentDirection = AXIS_BOTH;
+    private MovementDirection mCurrentMovementDirection = MovementDirection.RIGHT;
     private boolean mIsScrolling;
 
 
 
     //Measuring related fields
     private int angle;
-    private int mLouversCount;
+    private int mLouversCountV;
+    private int mLouversCountH;
     private int mOffset = 0;
-    private float mPanelWidth;
-    private float mPanelCenterX, mPanelCenterY;
-    private int mLockEdge;
+    private float mPanelWidthV;
+    private float mPanelWidthH;
+    private float mPanelCenterXV, mPanelCenterYV;
+    private float mPanelCenterXH, mPanelCenterYH;
+    private int mLockEdgeV;
+    private int mLockEdgeH;
 
 
 	public LouversView(Context context) {
@@ -82,15 +89,17 @@ public class LouversView extends FrameLayout {
         setWillNotDraw(false);
 
 		TypedArray ta = context.obtainStyledAttributes(attrs, R.styleable.LouversView);
-        mLouversCount = ta.getInteger(R.styleable.LouversView_panelCount, DEF_PANEL_COUNT);
+
+        mLouversCountV = ta.getInteger(R.styleable.LouversView_panel_count_vertical, 8);
+        mLouversCountH = ta.getInteger(R.styleable.LouversView_panel_count_horizontal, 4);
 
         if(ta.getBoolean(R.styleable.LouversView_vertical, false))
-            mCurrentDirection = Direction.AXIS_Y;
+            mAccessibleDirections |= AXIS_Y;
 
         if(ta.getBoolean(R.styleable.LouversView_horizontal, false))
-            mCurrentDirection = Direction.AXIS_X;
+            mAccessibleDirections |= AXIS_X;
 
-
+        edgeLock = ta.getBoolean(R.styleable.LouversView_edge_lock, false);
 
 //		mAngle = ta.getInteger(R.styleable.LouversView_angle, DEF_ANGLE);
 	    ta.recycle();
@@ -114,28 +123,65 @@ public class LouversView extends FrameLayout {
         int dataHeight = frontBitmap.getHeight();
         int dataWidth = frontBitmap.getWidth();
 
-        bArr = new Bitmap[mLouversCount];
+        bArrH = new Bitmap[mLouversCountH];
+        bArrV = new Bitmap[mLouversCountV];
 
-        switch (mCurrentDirection) {
+        switch (mAccessibleDirections) {
             case AXIS_X:
-                mPanelWidth = dataWidth /mLouversCount;
-                mPanelCenterX = mPanelWidth / 2;
-                mPanelCenterY = dataHeight / 2;
+
+                mPanelWidthH = dataWidth /mLouversCountH;
+                mPanelCenterXH = mPanelWidthH / 2;
+                mPanelCenterYH = dataHeight / 2;
+                for(int i = 0; i < mLouversCountH; i++) {
+                    bArrH[i] = Bitmap.createBitmap(frontBitmap, (int) (mPanelWidthH*i), 0, (int) mPanelWidthH, dataHeight);
+                }
+
                 break;
             case AXIS_Y:
-                mPanelWidth = dataHeight /mLouversCount;
-                mPanelCenterX = dataWidth / 2;
-                mPanelCenterY = mPanelWidth / 2;
-                for(int i = 0; i < mLouversCount; i++) {
-                    bArr[i] = Bitmap.createBitmap(frontBitmap, 0, (int) (mPanelWidth*i), dataWidth, (int) mPanelWidth);
+
+                mPanelWidthV = dataHeight /mLouversCountV;
+                mPanelCenterXV = dataWidth / 2;
+                mPanelCenterYV = mPanelWidthV / 2;
+                for(int i = 0; i < mLouversCountV; i++) {
+                    bArrV[i] = Bitmap.createBitmap(frontBitmap, 0, (int) (mPanelWidthV*i), dataWidth, (int) mPanelWidthV);
                 }
+
+                break;
+            case AXIS_BOTH:
+
+                mPanelWidthH = dataWidth /mLouversCountH;
+                mPanelCenterXH = mPanelWidthH / 2;
+                mPanelCenterYH = dataHeight / 2;
+                for(int i = 0; i < mLouversCountH; i++) {
+                    bArrH[i] = Bitmap.createBitmap(frontBitmap, (int) (mPanelWidthH*i), 0, (int) mPanelWidthH, dataHeight);
+                }
+
+                mPanelWidthV = dataHeight /mLouversCountV;
+                mPanelCenterXV = dataWidth / 2;
+                mPanelCenterYV = mPanelWidthV / 2;
+                for(int i = 0; i < mLouversCountV; i++) {
+                    bArrV[i] = Bitmap.createBitmap(frontBitmap, 0, (int) (mPanelWidthV*i), dataWidth, (int) mPanelWidthV);
+                }
+
                 break;
         }
 
         frontBitmap.recycle();
         frontBitmap = null;
 
-        mLockEdge = (int) ((mLouversCount-1) * mPanelWidth - mPanelWidth * 3/4 - (mLouversCount-1) * mPanelWidth/4 + mPanelWidth);
+        mLockEdgeH = edgeLock
+                ? (int) ((mLouversCountH-1) * mPanelWidthH - mPanelWidthH * 3/4 - (mLouversCountH-1) * mPanelWidthH/4 + mPanelWidthH)
+                : getWidth();
+
+        mLockEdgeV = edgeLock
+                ? (int) ((mLouversCountV-1) * mPanelWidthH - mPanelWidthV * 3/4 - (mLouversCountV-1) * mPanelWidthV/4 + mPanelWidthV)
+                : getHeight();
+
+        mHitRectStartV = new Rect(0 + (int)mPanelWidthH, 0, dataWidth - (int)mPanelWidthH, (int)mPanelWidthV);
+        mHitRectEndV = new Rect(0 + (int)mPanelWidthH, dataHeight - (int)mPanelWidthV, dataWidth - (int)mPanelWidthH, dataHeight);
+
+        mHitRectStartH = new Rect(0 , 0 - (int)mPanelWidthV, (int)mPanelWidthH, dataHeight - (int)mPanelWidthV);
+        mHitRectEndH = new Rect(dataWidth - (int)mPanelWidthH, 0 - (int)mPanelWidthV, dataWidth, dataHeight - (int)mPanelWidthV);
     }
 
     @Override
@@ -143,17 +189,54 @@ public class LouversView extends FrameLayout {
         canvas.save();
         mBackView.draw(canvas);
 
-
-        isLocked = mLockEdge < mOffset;
-        for(int i = mLouversCount-1; i>=0;i--){
-            Matrix m= getRotationMatrix(getAngleByOffset(mOffset, i));
-            if(!isLocked)
-                m.postTranslate(0, i*mPanelWidth+getMarginByOffset(mOffset, i));
-            else{
-                mOffset = mLockEdge;
-                m.postTranslate(0, i*mPanelWidth+getMarginByOffset(mOffset, i));
+        if (mCurrentMovementDirection == MovementDirection.DOWN) {
+            isLocked = mLockEdgeV < mOffset;
+            for (int i = mLouversCountV - 1; i >= 0; i--) {
+                Matrix m = getRotationMatrix(getAngleByOffset(mOffset, i));
+                if (!isLocked)
+                    m.postTranslate(0, i * mPanelWidthV + getMarginByOffset(mOffset, i));
+                else {
+                    mOffset = mLockEdgeV;
+                    m.postTranslate(0, i * mPanelWidthV + getMarginByOffset(mOffset, i));
+                }
+                canvas.drawBitmap(bArrV[i], m, null);
             }
-            canvas.drawBitmap(bArr[i], m, null);
+        } else if (mCurrentMovementDirection == MovementDirection.UP) {
+            isLocked = mOffset == 0;
+            for (int i = 0; i <= mLouversCountV - 1; i++) {
+                Matrix m = getRotationMatrix(getAngleByOffset(mOffset, i));
+                if (!isLocked)
+                    m.postTranslate(0, /*(mLouversCount - 1 - i)*/i * mPanelWidthV - getMarginByOffset(mOffset, i));
+                else {
+                    mOffset = 0;
+                    m.postTranslate(0, i * mPanelWidthV );
+                }
+                canvas.drawBitmap(bArrV[i], m, null);
+            }
+        } else if (mCurrentMovementDirection == MovementDirection.RIGHT) {
+            isLocked = mLockEdgeH < mOffset;
+            for (int i = mLouversCountH - 1; i >= 0; i--) {
+                Matrix m = getRotationMatrix(getAngleByOffset(mOffset, i));
+//                if (!isLocked)
+                m.postTranslate(i * mPanelWidthH + getMarginByOffset(mOffset, i), /*(mLouversCount - 1 - i)*/0);
+//                else {
+//                    mOffset = mLockEdge;
+//                    m.postTranslate(0, i * mPanelWidth + getMarginByOffset(mOffset, i));
+//                }
+                canvas.drawBitmap(bArrH[i], m, null);
+            }
+        } else if (mCurrentMovementDirection == MovementDirection.LEFT) {
+            isLocked = mOffset == 0;
+            for (int i = 0; i <= mLouversCountH - 1; i++) {
+                Matrix m = getRotationMatrix(getAngleByOffset(mOffset, i));
+//                if (!isLocked)
+                m.postTranslate(i * mPanelWidthH - getMarginByOffset(mOffset, i), /*(mLouversCount - 1 - i)*/0);
+//                else {
+//                    mOffset = mLockEdge;
+//                    m.postTranslate(0, i * mPanelWidth + getMarginByOffset(mOffset, i));
+//                }
+                canvas.drawBitmap(bArrH[i], m, null);
+            }
         }
 //        mFrontView.draw(canvas);
         super.onDraw(canvas);
@@ -175,13 +258,6 @@ public class LouversView extends FrameLayout {
             mIsScrolling = isBorderHit(event.getX(), event.getY());
         }
 
-//        if(event.getAction() == MotionEvent.ACTION_UP) {
-//            if(mIsScrolling ) {
-//                Log.d("OnTouchListener --> onTouch ACTION_UP");
-//                mIsScrolling  = false;
-//                handleScrollFinished();
-//            };
-//        }
         if(mIsScrolling)
             mGestureDetector.onTouchEvent(event);
         return true;
@@ -200,11 +276,31 @@ public class LouversView extends FrameLayout {
 //			Log.d(TAG, "x1="+e1.getX()+" y1="+e1.getY()+" mOffset = "+mOffset);
 //			Log.d(TAG, "x2="+e2.getX()+" y2="+e2.getY());
 //			if(isBorderHit(e2.getX(), e2.getY())) {
-            mOffset-=distanceY;
+
+            if (mCurrentMovementDirection == MovementDirection.DOWN)
+                mOffset -= distanceY;
+            else if (mCurrentMovementDirection == MovementDirection.UP)
+                mOffset += distanceY;
+            else if (mCurrentMovementDirection == MovementDirection.RIGHT)
+                mOffset -= distanceX;
+            else if (mCurrentMovementDirection == MovementDirection.LEFT)
+                mOffset += distanceX;
+
             mOffset = mOffset < 0 ? 0 : mOffset;
+
             invalidate();
+
+            if (mCurrentMovementDirection == MovementDirection.DOWN) {
+                mHitRectStartV.offsetTo(0, (int) (mOffset));
+            } else if (mCurrentMovementDirection == MovementDirection.UP) {
+                mHitRectEndV.offsetTo(0, (int) (getHeight() - mOffset - mPanelWidthV));
+            } else if (mCurrentMovementDirection == MovementDirection.RIGHT) {
+                mHitRectEndV.offsetTo((int) (mOffset), 0);
+            } else if (mCurrentMovementDirection == MovementDirection.LEFT) {
+                mHitRectEndV.offsetTo((int) (getWidth() - mOffset - mPanelWidthH), 0);
+            }
 //			}
-            Log.d(TAG, "mOffset=" + mOffset + "\tdistanceY = " + distanceY);
+            Log.d(TAG, "mOffset=" + mOffset + "\tdistanceY = " + distanceY + "\tdistanceX = " + distanceX);
 //			Log.d(TAG, "x="+e1.getX()+" y="+e1.getY()+" onScroll distanceX = "+distanceX+"\tdistanceY = "+distanceY);
             return super.onScroll(e1, e2, distanceX, distanceY);
 		}
@@ -213,21 +309,67 @@ public class LouversView extends FrameLayout {
 
     private float getAngleByOffset(float offset, int i) {
 //		return 0;
-        int angle = 0;
-        offset+=i*30;
-        if(offset < (i+1)*mPanelWidth-mPanelWidth*3/4)
-            return angle;
-        else if(offset > (i+1)*mPanelWidth-mPanelWidth/4)
-            return MAX_ANGLE;
-        else
-            return MAX_ANGLE*Math.abs((offset - ((i)*mPanelWidth+mPanelWidth/4)))/(mPanelWidth/2);
+        if(mCurrentMovementDirection == MovementDirection.DOWN ) {
+
+            offset += i * 30;
+            if (offset < (i + 1) * mPanelWidthV - mPanelWidthV * 3 / 4)
+                return 0;
+            else if (offset > (i + 1) * mPanelWidthV - mPanelWidthV / 4)
+                return MAX_ANGLE;
+            else
+                return MAX_ANGLE * Math.abs((offset - ((i) * mPanelWidthV + mPanelWidthV / 4))) / (mPanelWidthV / 2);
+
+        } else if(mCurrentMovementDirection == MovementDirection.RIGHT){
+
+            offset += i * 30;
+            if (offset < (i + 1) * mPanelWidthH - mPanelWidthH * 3 / 4)
+                return 0;
+            else if (offset > (i + 1) * mPanelWidthH - mPanelWidthH / 4)
+                return MAX_ANGLE;
+            else
+                return MAX_ANGLE * Math.abs((offset - ((i) * mPanelWidthH + mPanelWidthH / 4))) / (mPanelWidthH / 2);
+
+        } else if (mCurrentMovementDirection == MovementDirection.UP) {
+
+            i = mLouversCountV - 1 - i;
+            offset += i * 30;
+            if (offset < (i + 1) * mPanelWidthV - mPanelWidthV * 3 / 4)
+                return 0;
+            else if (offset > (i + 1) * mPanelWidthV - mPanelWidthV / 4)
+                return -MAX_ANGLE;
+            else
+                return -MAX_ANGLE * Math.abs((offset - ((i) * mPanelWidthV + mPanelWidthV / 4))) / (mPanelWidthV / 2);
+
+        } else if (mCurrentMovementDirection == MovementDirection.LEFT) {
+
+            i = mLouversCountH - 1 - i;
+            offset += i * 30;
+            if (offset < (i + 1) * mPanelWidthH - mPanelWidthH * 3 / 4)
+                return 0;
+            else if (offset > (i + 1) * mPanelWidthH - mPanelWidthH / 4)
+                return -MAX_ANGLE;
+            else
+                return -MAX_ANGLE * Math.abs((offset - ((i) * mPanelWidthH + mPanelWidthH / 4))) / (mPanelWidthH / 2);
+
+        }
+        return 0;
     }
 
     private int getMarginByOffset(int offset, int i) {
-        if(offset < i*mPanelWidth-mPanelWidth*3/4 - i*mPanelWidth/4 + mPanelWidth)
+        int marginThreshold = 0;
+        if(mCurrentMovementDirection == MovementDirection.DOWN) {
+            marginThreshold  = (int) (i * mPanelWidthV * 3 / 4 + mPanelWidthV / 4);
+        } else if(mCurrentMovementDirection == MovementDirection.RIGHT) {
+            marginThreshold  = (int) (i * mPanelWidthH * 3 / 4 + mPanelWidthH / 4);
+        }else if(mCurrentMovementDirection == MovementDirection.UP) {
+            marginThreshold = (int) ((mLouversCountV -1 - i) * mPanelWidthV * 3 / 4 + mPanelWidthV / 4);
+        } else if(mCurrentMovementDirection == MovementDirection.LEFT) {
+            marginThreshold = (int) ((mCurrentMovementDirection == MovementDirection.UP ? mLouversCountH : mLouversCountH -1 - i) * mPanelWidthH * 3 / 4 + mPanelWidthH / 4);
+        }
+        if (offset < marginThreshold)
             return 0;
         else
-            return (int) (offset - (i*mPanelWidth - mPanelWidth*3/4 - i*mPanelWidth/4 + mPanelWidth));
+            return offset - marginThreshold;
     }
 
     public void skewCanvas(Canvas canvas) {
@@ -236,8 +378,13 @@ public class LouversView extends FrameLayout {
         mCamera.getMatrix(skew);
         mCamera.restore();
 
-        skew.preTranslate(-mPanelCenterX, -mPanelCenterY); //This is the key to getting the correct viewing perspective
-        skew.postTranslate(mPanelCenterX, mPanelCenterY);
+        if(mCurrentMovementDirection == MovementDirection.DOWN || mCurrentMovementDirection == MovementDirection.UP) {
+            skew.preTranslate(-mPanelCenterXV, -mPanelCenterYV); //This is the key to getting the correct viewing perspective
+            skew.postTranslate(mPanelCenterXV, mPanelCenterYV);
+        } else if (mCurrentMovementDirection == MovementDirection.LEFT || mCurrentMovementDirection == MovementDirection.RIGHT) {
+            skew.preTranslate(-mPanelCenterXH, -mPanelCenterYH); //This is the key to getting the correct viewing perspective
+            skew.postTranslate(mPanelCenterXH, mPanelCenterYH);
+        }
 
         canvas.concat(skew);
     }
@@ -261,38 +408,90 @@ public class LouversView extends FrameLayout {
 
     private Matrix getRotationMatrix(float angle) {
         mCamera.save();
-        mCamera.rotateX(angle);
-        mCamera.rotateY(0);
+        if(mCurrentDirection == AXIS_Y)
+            mCamera.rotateX(angle);
+        if(mCurrentDirection == AXIS_X)
+            mCamera.rotateY(-angle);
         mCamera.rotateZ(0);
         mCamera.getMatrix(skew);
         mCamera.restore();
 
-        skew.preTranslate(-mPanelCenterX, -mPanelCenterY); //This is the key to getting the correct viewing perspective
-        skew.postTranslate(mPanelCenterX, mPanelCenterY);
+        if(mCurrentMovementDirection == MovementDirection.DOWN || mCurrentMovementDirection == MovementDirection.UP) {
+            skew.preTranslate(-mPanelCenterXV, -mPanelCenterYV); //This is the key to getting the correct viewing perspective
+            skew.postTranslate(mPanelCenterXV, mPanelCenterYV);
+        } else if (mCurrentMovementDirection == MovementDirection.LEFT || mCurrentMovementDirection == MovementDirection.RIGHT) {
+            skew.preTranslate(-mPanelCenterXH, -mPanelCenterYH); //This is the key to getting the correct viewing perspective
+            skew.postTranslate(mPanelCenterXH, mPanelCenterYH);
+        }
         return skew;
     }
 
     //TODO look if scroll started near border and only then hit!
     private boolean isBorderHit(float x, float y) {
-        Log.d(TAG, "isBorderHit");
-        switch (mCurrentDirection) {
+
+        switch (mAccessibleDirections) {
             case AXIS_X:{//TODO mPanelWidth change to constants multiplexed on dp
-                return x < mOffset + mPanelWidth*1.5 && x > mOffset-mPanelWidth*0.5;
+                boolean containsStart = mHitRectStartH.contains((int) x, (int) y);
+                boolean containsEnd = mHitRectEndH.contains((int) x, (int) y);
+                if (containsStart) {
+                    mCurrentMovementDirection = MovementDirection.RIGHT;
+                } else if (containsEnd) {
+                    mCurrentMovementDirection = MovementDirection.LEFT;
+                }
+                if(containsStart || containsEnd) {
+                    mOffset = 0;
+                }
+                return containsStart || containsEnd;
             }
             case AXIS_Y:{
-                if(y < mPanelWidth * 1.5 && (mOffset >= 0 && mOffset <= mPanelWidth)) {
+                boolean containsStart = mHitRectStartV.contains((int) x, (int) y);
+                boolean containsEnd = mHitRectEndV.contains((int) x, (int) y);
+                if (containsStart) {
                     mCurrentMovementDirection = MovementDirection.DOWN;
-                    return true;
-                }else if(y > mPanelWidth * (mLouversCount - 1) && (mOffset >= mLockEdge - mPanelWidth && mOffset <= mLockEdge)) {
+                } else if (containsEnd) {
                     mCurrentMovementDirection = MovementDirection.UP;
-                    mOffset = mLockEdge;
+                }
+                if(containsStart || containsEnd) {
+                    mOffset = 0;
+                }
+                return containsStart || containsEnd;
+/*                if(y < mPanelWidthV * 1.5 && (mOffset >= 0 && mOffset <= mPanelWidthV)) {
+                    Log.d(TAG, "isBorderHit DOWN");
+                    mOffset = 0;
                     return true;
-                } else if(y > mOffset - mPanelWidth && y < mOffset + mPanelWidth){
+                }else if(y > mPanelWidthV * (mLouversCountV - 1) && ((mOffset >= mLockEdgeV - mPanelWidthV && mOffset <= mLockEdgeV) || mOffset == 0)) {
+                    mCurrentMovementDirection = MovementDirection.UP;
+                    Log.d(TAG, "isBorderHit UP");
+                    mOffset = 0;
+                    return true;
+                } else if(y > mOffset - mPanelWidthV && y < mOffset + mPanelWidthV){
                     return true;
                 } else {
                     return false;
-                }
+                }*/
 //				return y < mOffset + mPanelWidth*1.5 && y > mOffset-mPanelWidth*0.5;
+            }
+            case AXIS_BOTH:{
+
+                boolean containsStartH = mHitRectStartH.contains((int) x, (int) y);
+                boolean containsEndH = mHitRectEndH.contains((int) x, (int) y);
+                boolean containsStartV = mHitRectStartV.contains((int) x, (int) y);
+                boolean containsEndV = mHitRectEndV.contains((int) x, (int) y);
+
+                if (containsStartH) {
+                    mCurrentMovementDirection = MovementDirection.RIGHT;
+                } else if (containsEndH) {
+                    mCurrentMovementDirection = MovementDirection.LEFT;
+                } else if (containsStartV) {
+                    mCurrentMovementDirection = MovementDirection.DOWN;
+                } else if (containsEndV) {
+                    mCurrentMovementDirection = MovementDirection.UP;
+                }
+                if(containsStartH || containsEndH || containsEndV || containsEndV) {
+                    mOffset = 0;
+                }
+
+                return containsStartH || containsEndH || containsStartV || containsEndV;
             }
             default:{
                 return false;
