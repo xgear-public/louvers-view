@@ -301,7 +301,11 @@ public class LouversView extends FrameLayout {
 
         if(mIsScrolling)
             mGestureDetector.onTouchEvent(event);
-        return true;
+
+        if(!isBackViewHit((int)event.getX(), (int)event.getY()))
+            return true;
+        else
+            return mBackView.onTouchEvent(event);
     }
 
     @Override
@@ -343,12 +347,12 @@ public class LouversView extends FrameLayout {
                     break;
                 }
                 case RIGHT: {
-                    mHitRectEndV.offsetTo(mOffset, mHitRectStartV.top);
+                    mHitRectStartH.offsetTo(mOffset, mHitRectStartV.top);
                     Log.d(TAG, "onScroll = " + MovementDirection.RIGHT);
                     break;
                 }
                 case LEFT: {
-                    mHitRectEndV.offsetTo(getWidth() - mOffset - mPanelWidthH, mHitRectStartV.top);
+                    mHitRectEndH.offsetTo(getWidth() - mOffset - mPanelWidthH, mHitRectStartV.top);
                     Log.d(TAG, "onScroll = " + MovementDirection.LEFT);
                     break;
                 }
@@ -624,7 +628,33 @@ public class LouversView extends FrameLayout {
 //        mHitRectStartV.offsetTo(0, 300);
 //        Log.d(TAG, "HitRectStartV = " +mHitRectStartV.toShortString());
         for(int i = 0 ; i < 4; i++) {
-            Log.d(TAG, "startPosition["+i+"] = " +startPosition[i].toShortString());
+            Log.d(TAG, "startPosition[" + i + "] = " + startPosition[i].toShortString());
         }
+    }
+
+    private boolean isBackViewHit(int x, int y) {
+        Rect rr = null;
+        switch (mCurrentMovementDirection) {
+            case DOWN: {
+                rr = new Rect(0, 0, getWidth(), mHitRectStartV.top);
+                break;
+            }
+            case UP: {
+                rr = new Rect(0, mHitRectEndV.bottom, getWidth(), getHeight());
+                break;
+            }
+            case RIGHT: {
+                rr = new Rect(0, 0, mHitRectStartH.left, getHeight());
+                break;
+            }
+            case LEFT: {
+                rr = new Rect(mHitRectEndH.right, 0, getWidth(), getHeight());
+                break;
+            }
+        }
+        if(rr != null)
+            return rr.contains(x, y);
+        else
+            return false;
     }
 }
