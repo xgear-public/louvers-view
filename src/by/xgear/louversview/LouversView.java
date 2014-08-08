@@ -57,7 +57,7 @@ public class LouversView extends FrameLayout {
     private int mAccessibleDirections = 0;
     private int mCurrentDirection = AXIS_BOTH;
     private MovementDirection mCurrentMovementDirection = null;
-    private boolean mIsScrolling;
+    private boolean mIsScrollingAcceptd;
 
 
 
@@ -273,44 +273,31 @@ public class LouversView extends FrameLayout {
         //View group manages child drawing
     }
 
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if(event.getAction() == MotionEvent.ACTION_UP) {
-            mIsScrolling = false;
-//            if(mOffset == 0) {
-//                mHitRectStartV = new Rect(0 + (int) mPanelWidthH, 0, mFrontViewWidth - (int) mPanelWidthH, (int) mPanelWidthV);
-//                mHitRectEndV = new Rect(0 + (int) mPanelWidthH, mFrontViewHeight - (int) mPanelWidthV, mFrontViewWidth - (int) mPanelWidthH, mFrontViewHeight);
-//
-//                mHitRectStartH = new Rect(0, 0 - (int) mPanelWidthV, (int) mPanelWidthH, mFrontViewHeight - (int) mPanelWidthV);
-//                mHitRectEndH = new Rect(mFrontViewWidth - (int) mPanelWidthH, 0 - (int) mPanelWidthV, mFrontViewWidth, mFrontViewHeight - (int) mPanelWidthV);
-//            }
-        }
-        if(event.getAction() == MotionEvent.ACTION_CANCEL) {
-            mIsScrolling = false;
-//            if(mOffset == 0) {
-//                mHitRectStartV = new Rect(0 + (int) mPanelWidthH, 0, mFrontViewWidth - (int) mPanelWidthH, (int) mPanelWidthV);
-//                mHitRectEndV = new Rect(0 + (int) mPanelWidthH, mFrontViewHeight - (int) mPanelWidthV, mFrontViewWidth - (int) mPanelWidthH, mFrontViewHeight);
-//
-//                mHitRectStartH = new Rect(0, 0 - (int) mPanelWidthV, (int) mPanelWidthH, mFrontViewHeight - (int) mPanelWidthV);
-//                mHitRectEndH = new Rect(mFrontViewWidth - (int) mPanelWidthH, 0 - (int) mPanelWidthV, mFrontViewWidth, mFrontViewHeight - (int) mPanelWidthV);
-//            }
-        }
-        if(event.getAction() == MotionEvent.ACTION_DOWN) {
-            mIsScrolling = isBorderHit(event.getX(), event.getY());
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                mIsScrollingAcceptd = false;
+                moveHitRectArea();
+                break;
+            }
+            case MotionEvent.ACTION_DOWN: {
+                mIsScrollingAcceptd = isBorderHit(event.getX(), event.getY());
+                break;
+            }
         }
 
-        if(mIsScrolling)
+        if(mIsScrollingAcceptd)
             mGestureDetector.onTouchEvent(event);
 
-        if(!isBackViewHit((int)event.getX(), (int)event.getY()))
-            return true;
-        else
-            return mBackView.onTouchEvent(event);
+        return true;
     }
 
     @Override
-    public boolean onInterceptTouchEvent(MotionEvent ev) {
-        return true;//TODO resolve situations when click by back view
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        return !isBackViewHit((int)event.getX(), (int)event.getY());//TODO resolve situations when click by back view
     }
 
     private final GestureDetector.SimpleOnGestureListener mGestureListener = new SimpleOnGestureListener(){
@@ -335,34 +322,6 @@ public class LouversView extends FrameLayout {
 
             invalidate();
 
-            switch (mCurrentMovementDirection) {
-                case DOWN: {
-                    mHitRectStartV.offsetTo(mHitRectStartV.left, mOffset);
-                    Log.d(TAG, "onScroll = " + MovementDirection.DOWN);
-                    break;
-                }
-                case UP: {
-                    mHitRectEndV.offsetTo(mHitRectStartV.left, getHeight() - mOffset - mPanelWidthV);
-                    Log.d(TAG, "onScroll = " + MovementDirection.UP);
-                    break;
-                }
-                case RIGHT: {
-                    mHitRectStartH.offsetTo(mOffset, mHitRectStartV.top);
-                    Log.d(TAG, "onScroll = " + MovementDirection.RIGHT);
-                    break;
-                }
-                case LEFT: {
-                    mHitRectEndH.offsetTo(getWidth() - mOffset - mPanelWidthH, mHitRectStartV.top);
-                    Log.d(TAG, "onScroll = " + MovementDirection.LEFT);
-                    break;
-                }
-            }
-//            if (mCurrentMovementDirection == MovementDirection.DOWN) {
-//            } else if (mCurrentMovementDirection == MovementDirection.UP) {
-//            } else if (mCurrentMovementDirection == MovementDirection.RIGHT) {
-//            } else if (mCurrentMovementDirection == MovementDirection.LEFT) {
-//            }
-
 //			}
 //            Log.d(TAG, "mOffset=" + mOffset + "\tdistanceY = " + distanceY + "\tdistanceX = " + distanceX);
 //			Log.d(TAG, "x="+e1.getX()+" y="+e1.getY()+" onScroll distanceX = "+distanceX+"\tdistanceY = "+distanceY);
@@ -375,6 +334,33 @@ public class LouversView extends FrameLayout {
             return super.onDoubleTap(e);
         }
     };
+
+    private void moveHitRectArea() {
+        if(mCurrentMovementDirection != null) {
+            switch (mCurrentMovementDirection) {
+                case DOWN: {
+                    mHitRectStartV.offsetTo(mHitRectStartV.left, mOffset);
+                    Log.d(TAG, "onScroll = " + MovementDirection.DOWN);
+                    break;
+                }
+                case UP: {
+                    mHitRectEndV.offsetTo(mHitRectEndV.left, getHeight() - mOffset - mPanelWidthV);
+                    Log.d(TAG, "onScroll = " + MovementDirection.UP);
+                    break;
+                }
+                case RIGHT: {
+                    mHitRectStartH.offsetTo(mOffset, mHitRectStartH.top);
+                    Log.d(TAG, "onScroll = " + MovementDirection.RIGHT);
+                    break;
+                }
+                case LEFT: {
+                    mHitRectEndH.offsetTo(getWidth() - mOffset - mPanelWidthH, mHitRectEndH.top);
+                    Log.d(TAG, "onScroll = " + MovementDirection.LEFT);
+                    break;
+                }
+            }
+        }
+    }
 
     private float getAngleByOffset(float offset, int i) {
 //		return 0;
@@ -545,27 +531,20 @@ public class LouversView extends FrameLayout {
 //                }
                 Log.d(TAG, "isBorderHit = "+mCurrentMovementDirection);
                 return containsStart || containsEnd;
-/*                if(y < mPanelWidthV * 1.5 && (mOffset >= 0 && mOffset <= mPanelWidthV)) {
-                    mOffset = 0;
-                    return true;
-                }else if(y > mPanelWidthV * (mLouversCountV - 1) && ((mOffset >= mLockEdgeV - mPanelWidthV && mOffset <= mLockEdgeV) || mOffset == 0)) {
-                    mCurrentMovementDirection = MovementDirection.UP;
-                    Log.d(TAG, "isBorderHit UP");
-                    mOffset = 0;
-                    return true;
-                } else if(y > mOffset - mPanelWidthV && y < mOffset + mPanelWidthV){
-                    return true;
-                } else {
-                    return false;
-                }*/
-//				return y < mOffset + mPanelWidth*1.5 && y > mOffset-mPanelWidth*0.5;
             }
             case AXIS_BOTH:{
 
                 boolean containsStartH = mHitRectStartH.contains((int) x, (int) y);
+                containsStartH = (mCurrentMovementDirection != MovementDirection.RIGHT && mOffset > 0) ? false : containsStartH;
+
                 boolean containsEndH = mHitRectEndH.contains((int) x, (int) y);
+                containsEndH = (mCurrentMovementDirection != MovementDirection.LEFT && mOffset > 0) ? false : containsEndH;
+
                 boolean containsStartV = mHitRectStartV.contains((int) x, (int) y);
+                containsStartV = (mCurrentMovementDirection != MovementDirection.DOWN && mOffset > 0) ? false : containsStartV;
+
                 boolean containsEndV = mHitRectEndV.contains((int) x, (int) y);
+                containsEndV = (mCurrentMovementDirection != MovementDirection.UP && mOffset > 0) ? false : containsEndV;
 
                 if (containsStartH) {
                     mCurrentMovementDirection = MovementDirection.RIGHT;
@@ -580,9 +559,6 @@ public class LouversView extends FrameLayout {
                     mCurrentMovementDirection = MovementDirection.UP;
                     mHitRectStartV = new Rect(startPosition[0]);
                 }
-//                if(containsStartH || containsEndH || containsStartV || containsEndV) {
-//                    mOffset = 0;
-//                }
 
                 Log.d(TAG, "isBorderHit = "+mCurrentMovementDirection);
                 return containsStartH || containsEndH || containsStartV || containsEndV;
@@ -633,28 +609,31 @@ public class LouversView extends FrameLayout {
     }
 
     private boolean isBackViewHit(int x, int y) {
-        Rect rr = null;
-        switch (mCurrentMovementDirection) {
-            case DOWN: {
-                rr = new Rect(0, 0, getWidth(), mHitRectStartV.top);
-                break;
+        if(mCurrentMovementDirection != null) {
+            Rect rr = null;
+            switch (mCurrentMovementDirection) {
+                case DOWN: {
+                    rr = new Rect(0, 0, getWidth(), mHitRectStartV.top);
+                    break;
+                }
+                case UP: {
+                    rr = new Rect(0, mHitRectEndV.bottom, getWidth(), getHeight());
+                    break;
+                }
+                case RIGHT: {
+                    rr = new Rect(0, 0, mHitRectStartH.left, getHeight());
+                    break;
+                }
+                case LEFT: {
+                    rr = new Rect(mHitRectEndH.right, 0, getWidth(), getHeight());
+                    break;
+                }
             }
-            case UP: {
-                rr = new Rect(0, mHitRectEndV.bottom, getWidth(), getHeight());
-                break;
-            }
-            case RIGHT: {
-                rr = new Rect(0, 0, mHitRectStartH.left, getHeight());
-                break;
-            }
-            case LEFT: {
-                rr = new Rect(mHitRectEndH.right, 0, getWidth(), getHeight());
-                break;
-            }
-        }
-        if(rr != null)
-            return rr.contains(x, y);
-        else
+            if (rr != null)
+                return rr.contains(x, y);
+            else
+                return false;
+        } else
             return false;
     }
 }
